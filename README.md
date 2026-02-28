@@ -16,6 +16,9 @@ inspired by Marc Peter Deisenroth's *"Mathematics for Machine Learning"* (Cambri
 ---
 
 ## Quick Start
+<img width="1595" height="862" alt="image" src="https://github.com/user-attachments/assets/ebe7855f-c78d-40c5-bbb8-187fb9853de1" />
+
+<img width="1905" height="1033" alt="image" src="https://github.com/user-attachments/assets/206365c9-0214-4ede-a411-dc70606ee32a" />
 
 ### 1. Install dependencies
 
