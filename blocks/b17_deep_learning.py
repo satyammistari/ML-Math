@@ -687,6 +687,75 @@ same as single-head attention.
                                  │
                            Output (n×d_model)
 """)
+
+    print("\n\033[93mINTUITION & FROM-SCRATCH VIEW\033[0m")
+    print("""
+  • Q (query):   "What am I looking for?" for this token
+  • K (key):     "What do I advertise as my content?"
+  • V (value):   "What information do I actually carry?"
+
+  For a sequence X ∈ ℝ^{n×d_model}:
+    Q = X W_Q,   K = X W_K,   V = X W_V
+    scores  = Q Kᵀ / √d_k        ← similarity of every query–key pair
+    weights = softmax(scores)    ← attention distribution over tokens
+    output  = weights V          ← weighted mix of values
+
+  The √d_k scaling keeps the dot products in a range where softmax
+  does not saturate. Without scaling, variance of Q·K grows with d_k
+  so softmax would produce near one-hot weights and kill gradients.
+""")
+
+    print("\n\033[93mCODE SNIPPET — Scaled Dot-Product & Multi-Head (PyTorch)\033[0m")
+    print("""\033[94m
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+import math
+
+def scaled_dot_product_attention(Q, K, V, mask=None):
+    d_k = Q.shape[-1]
+    scores = torch.matmul(Q, K.transpose(-2, -1)) / math.sqrt(d_k)
+    if mask is not None:
+        scores = scores.masked_fill(mask == 0, float('-inf'))
+    attn = F.softmax(scores, dim=-1)
+    out  = torch.matmul(attn, V)
+    return out, attn
+
+
+class MultiHeadAttention(nn.Module):
+    def __init__(self, d_model, num_heads):
+        super().__init__()
+        assert d_model % num_heads == 0
+        self.d_model  = d_model
+        self.num_heads = num_heads
+        self.d_k      = d_model // num_heads
+        self.W_q = nn.Linear(d_model, d_model)
+        self.W_k = nn.Linear(d_model, d_model)
+        self.W_v = nn.Linear(d_model, d_model)
+        self.W_o = nn.Linear(d_model, d_model)
+
+    def _split_heads(self, x, batch_size):
+        # (batch, seq, d_model) → (batch, heads, seq, d_k)
+        x = x.view(batch_size, -1, self.num_heads, self.d_k)
+        return x.transpose(1, 2)
+
+    def forward(self, Q, K, V, mask=None):
+        batch_size = Q.shape[0]
+        Q = self._split_heads(self.W_q(Q), batch_size)
+        K = self._split_heads(self.W_k(K), batch_size)
+        V = self._split_heads(self.W_v(V), batch_size)
+        x, weights = scaled_dot_product_attention(Q, K, V, mask)
+        x = x.transpose(1, 2).contiguous().view(batch_size, -1, self.d_model)
+        return self.W_o(x)
+
+# Example
+d_model, num_heads, seq_len, batch = 512, 8, 10, 2
+mha = MultiHeadAttention(d_model, num_heads)
+x   = torch.randn(batch, seq_len, d_model)
+out = mha(x, x, x)  # self-attention
+print(out.shape)    # (2, 10, 512)
+\033[0m""")
+
     input("\033[90m[Enter to continue]\033[0m")
 
 
@@ -735,6 +804,85 @@ residual connections around every sub-layer, layer normalization.
                                             │
                                        Output tokens
 """)
+
+    print("\n\033[93mWHY TRANSFORMERS REPLACED RNNS\033[0m")
+    print("""
+  RNNs process sequences token-by-token. This creates two issues:
+
+    • Sequential bottleneck: token t must wait for t−1 → poor GPU
+      utilisation on long sequences.
+    • Vanishing gradients: information from early tokens is pushed
+      through many tanh/sigmoid layers, so long-range signals die out.
+
+  Transformers process all tokens in parallel via self-attention.
+  Every token can directly attend to any other token in one step,
+  with constant path length between positions.
+""")
+
+    print("\033[93mASCII: RNN vs Transformer Computation\033[0m")
+    print("""
+  RNN (sequential, depth = sequence length)
+
+    x₁ → h₁ → h₂ → h₃ → ... → hₙ
+               ↑              ↑
+           long gradient path (vanishing/exploding)
+
+
+  Transformer (parallel, constant depth)
+
+    [x₁  x₂  x₃  ...  xₙ]
+        │   │          │
+   self-attention: every token attends to every other
+        ↓   ↓          ↓
+    [z₁  z₂  z₃  ...  zₙ]
+""")
+
+    print("\033[93mCODE SNIPPET — Simple RNN vs Parallel Attention\033[0m")
+    print("""\033[94m
+# Vanilla RNN (inherently sequential)
+h = hidden_state
+for token in sequence:          # must process one at a time
+    h = torch.tanh(W_h @ h + W_x @ token)
+
+# Transformer-style self-attention (all tokens at once)
+X = embed(tokens)               # (batch, seq, d)
+Q = X @ W_q; K = X @ W_k; V = X @ W_v
+scores  = Q @ K.transpose(-2, -1) / math.sqrt(d_k)
+weights = scores.softmax(dim=-1)
+Z = weights @ V                 # same shape as X
+\033[0m""")
+
+    print("\n\033[93mCODE SNIPPET — TRAINING LOOP WITH CLIPPING\033[0m")
+    print("""\033[94m
+def train_epoch(model, dataloader, optimizer, scheduler, device, grad_clip=1.0):
+    model.train()
+    total_loss = 0.0
+    for batch in dataloader:
+        input_ids = batch['input_ids'].to(device)
+        labels    = batch['labels'].to(device)
+
+        # 1. Forward pass
+        logits = model(input_ids)              # (batch, seq, vocab)
+
+        # 2. Shift for next-token prediction
+        shift_logits = logits[:, :-1, :].contiguous()
+        shift_labels = labels[:, 1:].contiguous()
+
+        loss = torch.nn.functional.cross_entropy(
+            shift_logits.view(-1, shift_logits.size(-1)),
+            shift_labels.view(-1)
+        )
+
+        # 3. Backward + clip + step
+        optimizer.zero_grad()
+        loss.backward()
+        torch.nn.utils.clip_grad_norm_(model.parameters(), grad_clip)
+        optimizer.step()
+        scheduler.step()
+
+        total_loss += loss.item()
+    return total_loss / len(dataloader)
+\033[0m""")
 
     print("\033[93mFORMULAS\033[0m")
     print("""
@@ -956,6 +1104,36 @@ Contrastive: for metric learning (pairs/triplets)
         plt.show()
     except ImportError:
         print("  \033[90m[Install plotext for loss plot]\033[0m")
+
+    print("\n\033[93mADVANCED: CROSS-ENTROPY & MSE IN PRACTICE\033[0m")
+    print("""
+  • Cross-entropy = negative log-likelihood of the correct class.
+  • For language models, we typically use token-level cross-entropy
+    over the vocabulary, then report exp(average loss) as perplexity.
+  • MSE is appropriate for regression-style targets (real values).
+""")
+
+    print("\033[93mCODE SNIPPET — Stable Cross-Entropy & MSE (PyTorch)\033[0m")
+    print("""\033[94m
+import torch
+import torch.nn.functional as F
+
+# Cross-entropy for language modelling
+batch, seq_len, vocab_size = 4, 128, 50257
+logits  = torch.randn(batch, seq_len, vocab_size)
+targets = torch.randint(0, vocab_size, (batch, seq_len))
+
+# Flatten time + batch dimensions
+loss_ce = F.cross_entropy(
+    logits.view(-1, vocab_size),
+    targets.view(-1)
+)
+
+# MSE for regression
+pred = torch.randn(100)
+true = torch.randn(100)
+loss_mse = F.mse_loss(pred, true)
+\033[0m""")
 
     print("\n\033[93mKEY INSIGHTS\033[0m")
     print("""  • MSE gradient grows linearly with error — outliers dominate

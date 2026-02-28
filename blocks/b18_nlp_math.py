@@ -461,6 +461,32 @@ standard intrinsic metric for LMs alongside bits-per-character.
     print(f"  Avg log P = {log_ll:.4f}")
     print(f"  Perplexity = exp({-log_ll:.4f}) = {ppl:.2f}")
 
+    print("\n\033[93mCODE SNIPPET — PERPLEXITY FOR A TORCH LM\033[0m")
+    print("""\033[94m
+import torch, math
+import torch.nn as nn
+
+def compute_perplexity(model, dataloader, device):
+    model.eval()
+    total_loss, total_tokens = 0.0, 0
+    criterion = nn.CrossEntropyLoss(reduction='sum')
+    with torch.no_grad():
+        for batch in dataloader:
+            input_ids = batch['input_ids'].to(device)
+            labels    = batch['labels'].to(device)
+            logits    = model(input_ids)
+            shift_logits = logits[:, :-1].contiguous()
+            shift_labels = labels[:, 1:].contiguous()
+            loss = criterion(
+                shift_logits.view(-1, shift_logits.size(-1)),
+                shift_labels.view(-1)
+            )
+            total_loss   += loss.item()
+            total_tokens += shift_labels.numel()
+    avg_nll = total_loss / total_tokens
+    return math.exp(avg_nll)
+\033[0m""")
+
     input("\033[90m[Enter to continue]\033[0m")
 
 
@@ -526,6 +552,25 @@ Better captures meaning than surface-form matching.
     print(f"  ROUGE-L = {rouge_l:.4f}")
     print(f"  Approx BLEU-1 = {bleu1_approx:.4f}")
 
+    print("\n\033[93mCODE SNIPPET — BLEU / ROUGE / F1 (LIBRARIES)\033[0m")
+    print("""\033[94m
+from nltk.translate.bleu_score import corpus_bleu, SmoothingFunction
+from rouge_score import rouge_scorer
+from sklearn.metrics import f1_score, classification_report
+
+references = [["the cat sat on the mat".split()]]
+hypotheses = ["the cat is on the mat".split()]
+smoothie   = SmoothingFunction().method1
+bleu = corpus_bleu(references, hypotheses, smoothing_function=smoothie)
+
+scorer = rouge_scorer.RougeScorer(['rouge1','rouge2','rougeL'], use_stemmer=True)
+scores = scorer.score("The cat sat on the mat", "A cat was sitting on the mat")
+
+y_true = [1,0,1,1,0,1,0,0,1,0]
+y_pred = [1,0,1,0,0,1,1,0,1,0]
+print(classification_report(y_true, y_pred))
+\033[0m""")
+
     input("\033[90m[Enter to continue]\033[0m")
 
 
@@ -557,5 +602,41 @@ breaks compatibility.
     print(f"  Word:       {text.split()}")
     print(f"  Char:       {list(text)}")
     print(f"  BPE-style:  ['token', 'ization', 'is', 'fasci', 'nating', '!']  (approx)")
+
+    print("\n\033[93mBPE FROM SCRATCH (ALGORITHM SKETCH)\033[0m")
+    print("""\033[94m
+from collections import Counter, defaultdict
+import re
+
+def train_bpe(text, num_merges=50):
+    # 1) build initial character vocab with </w> end-of-word token
+    words = text.lower().split()
+    vocab = Counter(" ".join(list(w) + ['</w>']) for w in words)
+
+    def get_pairs(vocab):
+        pairs = defaultdict(int)
+        for word, freq in vocab.items():
+            symbols = word.split()
+            for i in range(len(symbols)-1):
+                pairs[(symbols[i], symbols[i+1])] += freq
+        return pairs
+
+    for _ in range(num_merges):
+        pairs = get_pairs(vocab)
+        if not pairs:
+            break
+        best = max(pairs, key=pairs.get)
+        bigram = re.escape(" ".join(best))
+        pattern = re.compile(rf"(?<!\\S){bigram}(?!\\S)")
+        vocab = Counter({pattern.sub("".join(best), w): f for w, f in vocab.items()})
+    return vocab
+\033[0m""")
+
+    print("\n\033[93mTOKENISERS IN MODERN LLMs\033[0m")
+    print("""
+  • OpenAI GPT-4: tiktoken / BPE with ≈100k subword vocab.
+  • LLaMA / T5:   SentencePiece (BPE or unigram) over raw text.
+  • Trade-off: larger vocab → shorter sequences but bigger embedding table.
+""")
 
     input("\033[90m[Enter to continue]\033[0m")

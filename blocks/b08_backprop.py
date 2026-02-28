@@ -158,6 +158,74 @@ except ImportError:
 
 
 # ══════════════════════════════════════════════════════════════════════════════
+# EXTRA TOPIC — Backprop Intuition & Chain Rule
+# ══════════════════════════════════════════════════════════════════════════════
+def topic_backprop_intuition():
+        clear()
+        breadcrumb("mlmath", "Backpropagation", "Backprop Intuition")
+        section_header("BACKPROP INTUITION — CHAIN RULE IN ACTION")
+        print()
+
+        section_header("1. CORE IDEA")
+        print(white("""
+    Backpropagation answers: "How does changing each weight affect the loss?"
+    Mathematically it is just the chain rule applied backwards through a
+    computation graph.
+
+        Forward:  x → [Layer1] → h₁ → [Layer2] → h₂ → [Loss] → L
+        Backward: ∂L/∂w₁ = ∂L/∂h₂ · ∂h₂/∂h₁ · ∂h₁/∂w₁
+
+    Frameworks (PyTorch, JAX, TF) build this graph automatically and run the
+    backward pass for you, but conceptually it's just repeated chain rule.
+"""))
+        _pause()
+
+        section_header("2. TOY EXAMPLE — MANUAL VS AUTOGRAD")
+        print(white("""
+    Consider a tiny 2-layer scalar network:
+
+            x → h = x·w₁ → ŷ = h·w₂ → L = (ŷ − 10)²
+
+    We can work out gradients by hand using the chain rule:
+        dL/dŷ = 2(ŷ − 10)
+        dL/dw₂ = dL/dŷ · ∂ŷ/∂w₂ = 2(ŷ − 10) · h
+        dL/dw₁ = dL/dŷ · ∂ŷ/∂h · ∂h/∂w₁ = 2(ŷ − 10) · w₂ · x
+"""))
+
+        code_block("Manual vs PyTorch backprop", """
+import torch
+
+x  = torch.tensor([2.0])
+w1 = torch.tensor([3.0], requires_grad=True)
+w2 = torch.tensor([4.0], requires_grad=True)
+
+# Forward
+h      = x * w1           # = 6
+y_pred = h * w2           # = 24
+loss   = (y_pred - 10)**2 # = 196
+
+# Backward
+loss.backward()
+print(w1.grad, w2.grad)   # dL/dw1 = 224, dL/dw2 = 168
+""")
+        _pause()
+
+        section_header("3. VANISHING GRADIENTS")
+        print(white("""
+    With sigmoid activations, each layer multiplies the gradient by σ'(z).
+    Since 0 < σ'(z) ≤ 0.25, a deep stack of sigmoids shrinks gradients:
+
+            after 10 layers:  (0.25)¹⁰ ≈ 10⁻⁶
+
+    Early layers receive almost zero signal and barely learn. Modern
+    deep nets mitigate this with ReLU activations, residual connections,
+    normalisation, and careful weight initialisation.
+"""))
+        print()
+        topic_nav()
+
+
+# ══════════════════════════════════════════════════════════════════════════════
 # TOPIC 2 — Forward Pass
 # ══════════════════════════════════════════════════════════════════════════════
 def topic_forward_pass():
@@ -1089,6 +1157,7 @@ def run():
         ("Computation Graphs",         topic_computation_graphs),
         ("Forward Pass",               topic_forward_pass),
         ("Backward Pass",              topic_backward_pass),
+        ("Backprop Intuition",         topic_backprop_intuition),
         ("Vanishing Gradients",        topic_vanishing_gradients),
         ("Exploding Gradients",        topic_exploding_gradients),
         ("Backprop Through Layers",    topic_backprop_layers),

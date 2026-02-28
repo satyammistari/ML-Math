@@ -472,7 +472,7 @@ def topic_cross_validation():
   1. Shuffle dataset and split into k equal-sized folds F₁, F₂, ..., Fₖ.
   2. For i = 1 to k:
        a. Validation set = Fᵢ
-       b. Training set   = {F₁, ..., Fₖ} \ {Fᵢ}
+       b. Training set   = {F₁, ..., Fₖ} \\ {Fᵢ}
        c. Train model on training set, record validation score Sᵢ
   3. Return mean score: S̄ = (1/k) Σᵢ Sᵢ,  std: σ = std(Sᵢ)
 

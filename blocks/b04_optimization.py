@@ -151,6 +151,69 @@ for lr in [0.01, 0.1, 0.5, 1.1]:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# 11. PyTorch Optimisers & Schedulers (summary)
+# ─────────────────────────────────────────────────────────────────────────────
+def topic_pytorch_optimizers():
+    clear()
+    breadcrumb("mlmath", "Optimisation", "PyTorch Optimisers")
+    section_header("PYTORCH OPTIMISERS & LR SCHEDULERS")
+
+    section_header("1. OPTIMISER CHEAT-SHEET")
+    print(white("""
+  SGD:       w ← w − η·g                      (no momentum)
+  Momentum:  v ← βv + g,   w ← w − η·v        (smooths noisy grads)
+  Adam:      adaptive step per-parameter via first/second moments
+  AdamW:     Adam + decoupled weight decay (LLMs typically use this)
+"""))
+    _pause()
+
+    section_header("2. CODE SNIPPET (TORCH)")
+    code_block("Torch optimisers & schedulers", """
+import torch
+import torch.nn as nn
+from torch.optim.lr_scheduler import CosineAnnealingLR, LinearLR, SequentialLR
+
+model = nn.Linear(10, 1)
+
+# Plain SGD
+opt_sgd = torch.optim.SGD(model.parameters(), lr=0.01)
+
+# SGD with momentum
+opt_mom = torch.optim.SGD(model.parameters(), lr=0.01, momentum=0.9)
+
+# Adam
+opt_adam = torch.optim.Adam(model.parameters(), lr=1e-3,
+                            betas=(0.9, 0.999), eps=1e-8)
+
+# AdamW (decoupled weight decay) — common for Transformers
+opt_adamw = torch.optim.AdamW(model.parameters(), lr=1e-4, weight_decay=0.01)
+
+# Warmup + cosine decay schedule
+optimizer = opt_adamw
+warmup = LinearLR(optimizer, start_factor=0.01, end_factor=1.0, total_iters=1000)
+cosine = CosineAnnealingLR(optimizer, T_max=10000, eta_min=1e-5)
+sched  = SequentialLR(optimizer, schedulers=[warmup, cosine], milestones=[1000])
+
+for step in range(11000):
+    loss = model(torch.randn(32, 10)).pow(2).mean()
+    optimizer.zero_grad()
+    loss.backward()
+    optimizer.step()
+    sched.step()
+""")
+    _pause()
+
+    section_header("3. KEY TAKEAWAYS")
+    for txt in [
+        "AdamW with warmup+cosine is a very strong default for deep nets.",
+        "Warmup prevents huge, unstable updates early in training.",
+        "Schedulers are as important as the base optimiser for LLM training.",
+    ]:
+        print(f"  {green('✦')}  {white(txt)}")
+    topic_nav()
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # 2. SGD & Mini-batch
 # ─────────────────────────────────────────────────────────────────────────────
 def topic_sgd():
@@ -1449,6 +1512,7 @@ def run():
         ("Momentum & Nesterov",      topic_momentum),
         ("Adam Optimizer",           topic_adam),
         ("LR Schedulers",            topic_lr_schedulers),
+        ("PyTorch Optimisers",       topic_pytorch_optimizers),
         ("Convexity",                topic_convexity),
         ("Saddle Points",            topic_saddle_points),
         ("Newton's Method",          topic_newtons_method),
